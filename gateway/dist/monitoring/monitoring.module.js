@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MonitoringModule = void 0;
 const common_1 = require("@nestjs/common");
+const axios_1 = require("@nestjs/axios");
 const monitoring_controller_1 = require("./monitoring.controller");
 const monitoring_service_1 = require("./monitoring.service");
 const logger_service_1 = require("../common/logger.service");
@@ -19,6 +20,7 @@ let MonitoringModule = class MonitoringModule {
 exports.MonitoringModule = MonitoringModule;
 exports.MonitoringModule = MonitoringModule = __decorate([
     (0, common_1.Module)({
+        imports: [axios_1.HttpModule],
         controllers: [monitoring_controller_1.MonitoringController],
         providers: [monitoring_service_1.MonitoringService, logger_service_1.LoggerService, metrics_service_1.MetricsService, error_tracking_service_1.ErrorTrackingService, health_service_1.HealthService],
         exports: [monitoring_service_1.MonitoringService],
