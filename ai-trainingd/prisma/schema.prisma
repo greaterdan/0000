@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Training Jobs
+model AITrainingJob {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  name              String
+  description       String?
+  modelType         String   @map("model_type") // text, image, audio, video
+  architecture      String   // transformer, cnn, rnn, etc.
+  datasetId         String?  @map("dataset_id")
+  datasetUrl        String?  @map("dataset_url")
+  hyperparameters   Json     // Learning rate, batch size, epochs, etc.
+  status            String   @default("pending") // pending, running, completed, failed, cancelled
+  progress          Float    @default(0.0) // 0.0 to 1.0
+  costAIM           BigInt   @map("cost_aim") // AIM tokens cost
+  estimatedDuration Int?     @map("estimated_duration") // seconds
+  actualDuration    Int?     @map("actual_duration") // seconds
+  gpuHours          Float?   @map("gpu_hours")
+  modelUrl          String?  @map("model_url") // URL to trained model
+  metrics           Json?    // Training metrics (loss, accuracy, etc.)
+  logs              String[] @default([]) // Training logs
+  errorMessage      String?  @map("error_message")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  startedAt         DateTime? @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Relations
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@map("ai_training_jobs")
+}
+
+// Training Datasets
+model AITrainingDataset {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  name              String
+  description       String?
+  dataType          String   @map("data_type") // text, image, audio, video
+  size              BigInt   // bytes
+  recordCount       Int      @map("record_count")
+  costAIM           BigInt   @map("cost_aim") // AIM tokens to use this dataset
+  isPublic          Boolean  @map("is_public") @default(false)
+  downloadUrl       String?  @map("download_url")
+  metadata          Json?    // Dataset schema, labels, etc.
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2) // 0.00 to 5.00
+  tags              String[] @default([])
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user              Account  @relation(fields: [userId], references: [id])
+  trainingJobs      AITrainingJob[]
+
+  @@map("ai_training_datasets")
+}
+
+// Training Resources (GPUs, etc.)
+model AITrainingResource {
+  id                String   @id @default(uuid())
+  name              String
+  type              String   // gpu, cpu, tpu
+  specifications    Json     // GPU model, memory, etc.
+  costPerHourAIM    BigInt   @map("cost_per_hour_aim") // AIM tokens per hour
+  isAvailable       Boolean  @map("is_available") @default(true)
+  currentJobs       Int      @map("current_jobs") @default(0)
+  maxJobs           Int      @map("max_jobs") @default(1)
+  location          String?  // Data center location
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_training_resources")
+}
+
+// Training Job Queue
+model AITrainingQueue {
+  id                String   @id @default(uuid())
+  jobId             String   @map("job_id")
+  priority          Int      @default(0) // Higher number = higher priority
+  estimatedStart    DateTime @map("estimated_start")
+  resourceId        String?  @map("resource_id")
+  status            String   @default("queued") // queued, assigned, running
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  job               AITrainingJob @relation(fields: [jobId], references: [id])
+  resource          AITrainingResource? @relation(fields: [resourceId], references: [id])
+
+  @@map("ai_training_queue")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  trainingJobs      AITrainingJob[]
+  trainingDatasets  AITrainingDataset[]
+
+  @@map("accounts")
+}

@@ -1,0 +1,58 @@
+{
+  "name": "aim-currency-server",
+  "version": "1.0.0",
+  "description": "AI-Minted, Non-Blockchain Currency - Server Infrastructure",
+  "main": "index.js",
+  "scripts": {
+    "start": "node scripts/start-all.js",
+    "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:ledgerd\" \"npm run dev:mintd\" \"npm run dev:ai-marketplaced\" \"npm run dev:ai-trainingd\" \"npm run dev:ai-inferenced\" \"npm run dev:ai-datad\" \"npm run dev:ai-agentsd\" \"npm run dev:ai-contentd\" \"npm run dev:ai-validationd\" \"npm run dev:ai-deploymentd\"",
+    "dev:gateway": "cd gateway && npm run start:dev",
+    "dev:ledgerd": "cd ledgerd && npm run start:dev",
+    "dev:mintd": "cd mintd && npm run start:dev",
+    "dev:ai-marketplaced": "cd ai-marketplaced && npm run start:dev",
+    "dev:ai-trainingd": "cd ai-trainingd && npm run start:dev",
+    "dev:ai-inferenced": "cd ai-inferenced && npm run start:dev",
+    "dev:ai-datad": "cd ai-datad && npm run start:dev",
+    "dev:ai-agentsd": "cd ai-agentsd && npm run start:dev",
+    "dev:ai-contentd": "cd ai-contentd && npm run start:dev",
+    "dev:ai-validationd": "cd ai-validationd && npm run start:dev",
+    "dev:ai-deploymentd": "cd ai-deploymentd && npm run start:dev",
+    "build": "npm run build:gateway && npm run build:ledgerd && npm run build:mintd && npm run build:treasury && npm run build:ai-marketplaced && npm run build:ai-trainingd && npm run build:ai-inferenced && npm run build:ai-datad && npm run build:ai-agentsd && npm run build:ai-contentd && npm run build:ai-validationd && npm run build:ai-deploymentd",
+    "build:gateway": "cd gateway && npm run build",
+    "build:ledgerd": "cd ledgerd && npm run build",
+    "build:mintd": "cd mintd && npm run build",
+    "build:treasury": "cd treasury && npm run build",
+    "build:ai-marketplaced": "cd ai-marketplaced && npm run build",
+    "build:ai-trainingd": "cd ai-trainingd && npm run build",
+    "build:ai-inferenced": "cd ai-inferenced && npm run build",
+    "build:ai-datad": "cd ai-datad && npm run build",
+    "build:ai-agentsd": "cd ai-agentsd && npm run build",
+    "build:ai-contentd": "cd ai-contentd && npm run build",
+    "build:ai-validationd": "cd ai-validationd && npm run build",
+    "build:ai-deploymentd": "cd ai-deploymentd && npm run build",
+    "install:all": "npm install && npm run install:services",
+    "install:services": "cd gateway && npm install && cd ../ledgerd && npm install && cd ../mintd && npm install && cd ../treasury && npm install && cd ../ai-marketplaced && npm install && cd ../ai-trainingd && npm install && cd ../ai-inferenced && npm install && cd ../ai-datad && npm install && cd ../ai-agentsd && npm install && cd ../ai-contentd && npm install && cd ../ai-validationd && npm install && cd ../ai-deploymentd && npm install",
+    "migrate": "chmod +x scripts/migrate.sh && ./scripts/migrate.sh"
+  },
+  "keywords": [
+    "aim",
+    "currency",
+    "ai",
+    "cryptocurrency",
+    "quantum-safe"
+  ],
+  "author": "greaterdan",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2"
+  }
+}

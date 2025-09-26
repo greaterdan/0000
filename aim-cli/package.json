@@ -1,0 +1,51 @@
+{
+  "name": "aim-currency-cli",
+  "version": "1.0.0",
+  "description": "AIM Currency CLI Wallet - Command-line interface for managing AIM tokens",
+  "main": "dist/index.js",
+  "bin": {
+    "aim": "dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greaterdan/0000.git",
+    "directory": "server/aim-cli"
+  },
+  "keywords": [
+    "aim",
+    "currency",
+    "crypto",
+    "wallet",
+    "cli"
+  ],
+  "author": "AIM Currency Team",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "axios": "^1.6.0",
+    "bip39": "^3.1.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "conf": "^11.0.2",
+    "dilithium-crystals-js": "^1.0.0",
+    "inquirer": "^9.2.12",
+    "ora": "^5.4.1",
+    "qrcode-terminal": "^0.12.0",
+    "secp256k1": "^5.0.0",
+    "table": "^6.8.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.3.1",
+    "@types/qrcode-terminal": "^0.12.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.1.3"
+  }
+}

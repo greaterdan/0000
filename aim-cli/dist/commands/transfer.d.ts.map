@@ -1,0 +1,1 @@
+{"version":3,"file":"transfer.d.ts","sourceRoot":"","sources":["../../src/commands/transfer.ts"],"names":[],"mappings":"AAQA,qBAAa,eAAe;IAC1B,OAAO,CAAC,MAAM,CAAgB;IAC9B,OAAO,CAAC,GAAG,CAAY;;IAOjB,UAAU,CAAC,WAAW,CAAC,EAAE,MAAM,EAAE,MAAM,CAAC,EAAE,MAAM,EAAE,IAAI,CAAC,EAAE,MAAM,GAAG,OAAO,CAAC,IAAI,CAAC;CAoLtF"}

@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Models table
+model AIModel {
+  id                String   @id @default(uuid())
+  creatorId         String   @map("creator_id")
+  name              String
+  description       String?
+  modelType         String   @map("model_type") // text, image, audio, video
+  modelSize         BigInt   @map("model_size") // in bytes
+  version           String   @default("1.0.0")
+  costPerToken      Decimal  @map("cost_per_token") @db.Decimal(18, 8) // AIM tokens per token
+  totalEarnings     BigInt   @map("total_earnings") @default(0) // Total AIM earned
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2) // 0.00 to 5.00
+  tags              String[] @default([])
+  isPublic          Boolean  @map("is_public") @default(true)
+  isActive          Boolean  @map("is_active") @default(true)
+  modelUrl          String?  @map("model_url")
+  metadata          Json?    // Model configuration, parameters, etc.
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  creator           Account  @relation(fields: [creatorId], references: [id])
+  usages            AIModelUsage[]
+  reviews           AIModelReview[]
+
+  @@map("ai_models")
+}
+
+// AI Model Usage tracking
+model AIModelUsage {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  modelId     String   @map("model_id")
+  tokensUsed  Int      @map("tokens_used")
+  costAIM     BigInt   @map("cost_aim") // AIM tokens spent
+  inputSize   Int      @map("input_size") @default(0)
+  outputSize  Int      @map("output_size") @default(0)
+  duration    Int      @default(0) // milliseconds
+  success     Boolean  @default(true)
+  errorMessage String? @map("error_message")
+  timestamp   DateTime @default(now())
+
+  // Relations
+  user        Account  @relation(fields: [userId], references: [id])
+  model       AIModel  @relation(fields: [modelId], references: [id])
+
+  @@map("ai_model_usage")
+}
+
+// AI Model Reviews
+model AIModelReview {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  modelId   String   @map("model_id")
+  rating    Decimal  @db.Decimal(3, 2) // 0.00 to 5.00
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      Account  @relation(fields: [userId], references: [id])
+  model     AIModel  @relation(fields: [modelId], references: [id])
+
+  @@unique([userId, modelId])
+  @@map("ai_model_reviews")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id           String        @id @default(uuid())
+  displayName  String        @map("display_name")
+  kind         String        // human, agent, treasury
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  createdModels AIModel[]
+  modelUsages   AIModelUsage[]
+  modelReviews  AIModelReview[]
+
+  @@map("accounts")
+}

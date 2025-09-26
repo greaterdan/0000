@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Model Validation Tables
+model AIModelValidation {
+  id                String   @id @default(uuid())
+  modelId           String   @map("model_id")
+  validatorId       String   @map("validator_id")
+  validationType    String   @map("validation_type") // safety, performance, accuracy, bias, security
+  status            String   @default("pending") // pending, in_progress, completed, failed
+  testSuite         Json     @map("test_suite") // Test suite configuration
+  results           Json?    // Validation results
+  score             Decimal? @db.Decimal(5, 4) // 0.0000 to 1.0000
+  passedTests       Int      @map("passed_tests") @default(0)
+  totalTests        Int      @map("total_tests") @default(0)
+  costAIM           BigInt   @map("cost_aim") // AIM tokens spent on validation
+  duration          Int      @default(0) // milliseconds
+  reportUrl         String?  @map("report_url")
+  comments          String?
+  isPublic          Boolean  @map("is_public") @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Relations
+  model             AIModel  @relation(fields: [modelId], references: [id])
+  validator         Account  @relation(fields: [validatorId], references: [id])
+  testCases         AIModelTestCase[]
+
+  @@map("ai_model_validations")
+}
+
+// AI Model Test Cases
+model AIModelTestCase {
+  id                String   @id @default(uuid())
+  validationId      String   @map("validation_id")
+  testName          String   @map("test_name")
+  testType          String   @map("test_type") // unit, integration, performance, safety
+  input             Json     // Test input data
+  expectedOutput    Json?    @map("expected_output")
+  actualOutput      Json?    @map("actual_output")
+  passed            Boolean  @default(false)
+  score             Decimal? @db.Decimal(5, 4) // 0.0000 to 1.0000
+  errorMessage      String?  @map("error_message")
+  duration          Int      @default(0) // milliseconds
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  validation        AIModelValidation @relation(fields: [validationId], references: [id])
+
+  @@map("ai_model_test_cases")
+}
+
+// AI Model Validation Templates
+model AIModelValidationTemplate {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  validationType    String   @map("validation_type")
+  modelType         String   @map("model_type") // text, image, audio, video, multimodal
+  testSuite         Json     @map("test_suite") // Template test suite
+  parameters        Json?    // Default parameters
+  costAIM           BigInt   @map("cost_aim") // Cost in AIM tokens
+  isPublic          Boolean  @map("is_public") @default(true)
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2) // 0.00 to 5.00
+  tags              String[] @default([])
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_model_validation_templates")
+}
+
+// AI Model Validation Benchmarks
+model AIModelValidationBenchmark {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  modelType         String   @map("model_type")
+  category          String   // performance, safety, accuracy, bias
+  dataset           Json     // Benchmark dataset
+  metrics           Json     // Evaluation metrics
+  baseline          Json?    // Baseline performance
+  isActive          Boolean  @map("is_active") @default(true)
+  usageCount        Int      @map("usage_count") @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_model_validation_benchmarks")
+}
+
+// AI Model Validation Reports
+model AIModelValidationReport {
+  id                String   @id @default(uuid())
+  validationId      String   @map("validation_id")
+  reportType        String   @map("report_type") // summary, detailed, compliance
+  content           Json     // Report content
+  format            String   @default("json") // json, pdf, html
+  downloadUrl       String?  @map("download_url")
+  isPublic          Boolean  @map("is_public") @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  validation        AIModelValidation @relation(fields: [validationId], references: [id])
+
+  @@map("ai_model_validation_reports")
+}
+
+// AI Model relation (from ai-marketplaced)
+model AIModel {
+  id                String   @id @default(uuid())
+  creatorId         String   @map("creator_id")
+  name              String
+  description       String?
+  modelType         String   @map("model_type")
+  modelSize         BigInt   @map("model_size")
+  version           String   @default("1.0.0")
+  costPerToken      Decimal  @map("cost_per_token")
+  totalEarnings     BigInt   @map("total_earnings") @default(0)
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2)
+  tags              String[] @default([])
+  isPublic          Boolean  @map("is_public") @default(true)
+  isActive          Boolean  @map("is_active") @default(true)
+  modelUrl          String?  @map("model_url")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  validations       AIModelValidation[]
+  validationReports AIModelValidationReport[]
+
+  @@map("ai_models")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  validations       AIModelValidation[]
+
+  @@map("accounts")
+}

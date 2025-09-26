@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Inference Sessions
+model AIInferenceSession {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  modelId           String   @map("model_id")
+  sessionName       String?  @map("session_name")
+  totalRequests     Int      @map("total_requests") @default(0)
+  totalTokens       Int      @map("total_tokens") @default(0)
+  totalCostAIM      BigInt   @map("total_cost_aim") @default(0)
+  averageLatency    Float?   @map("average_latency") // milliseconds
+  status            String   @default("active") // active, paused, completed
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  lastUsedAt        DateTime? @map("last_used_at")
+
+  // Relations
+  user              Account  @relation(fields: [userId], references: [id])
+  requests          AIInferenceRequest[]
+
+  @@map("ai_inference_sessions")
+}
+
+// AI Inference Requests
+model AIInferenceRequest {
+  id                String   @id @default(uuid())
+  sessionId         String   @map("session_id")
+  userId            String   @map("user_id")
+  modelId           String   @map("model_id")
+  requestType       String   @map("request_type") // text, image, audio, video
+  input             Json     // Request input data
+  output            Json?    // Response output data
+  tokensUsed        Int      @map("tokens_used") @default(0)
+  costAIM           BigInt   @map("cost_aim") @default(0)
+  latency           Int      @default(0) // milliseconds
+  status            String   @default("pending") // pending, processing, completed, failed
+  errorMessage      String?  @map("error_message")
+  retryCount        Int      @map("retry_count") @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Relations
+  session           AIInferenceSession @relation(fields: [sessionId], references: [id])
+
+  @@map("ai_inference_requests")
+}
+
+// AI Model Endpoints
+model AIModelEndpoint {
+  id                String   @id @default(uuid())
+  modelId           String   @map("model_id")
+  endpointUrl       String   @map("endpoint_url")
+  endpointType      String   @map("endpoint_type") // http, websocket, grpc
+  maxConcurrency    Int      @map("max_concurrency") @default(10)
+  currentLoad       Int      @map("current_load") @default(0)
+  averageLatency    Float?   @map("average_latency")
+  isHealthy         Boolean  @map("is_healthy") @default(true)
+  lastHealthCheck   DateTime? @map("last_health_check")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_model_endpoints")
+}
+
+// Inference Performance Metrics
+model AIInferenceMetrics {
+  id                String   @id @default(uuid())
+  modelId           String   @map("model_id")
+  date              DateTime @db.Date
+  totalRequests     Int      @map("total_requests") @default(0)
+  successfulRequests Int     @map("successful_requests") @default(0)
+  failedRequests    Int      @map("failed_requests") @default(0)
+  averageLatency    Float?   @map("average_latency")
+  totalTokens       Int      @map("total_tokens") @default(0)
+  totalCostAIM      BigInt   @map("total_cost_aim") @default(0)
+  peakConcurrency   Int      @map("peak_concurrency") @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@unique([modelId, date])
+  @@map("ai_inference_metrics")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  inferenceSessions AIInferenceSession[]
+
+  @@map("accounts")
+}

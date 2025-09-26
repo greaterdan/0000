@@ -1,0 +1,635 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aim
+      POSTGRES_USER: aim
+      POSTGRES_PASSWORD: aim
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aim -d aim"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Message Queue
+  nats:
+    image: nats:2.10-alpine
+    command: ["--jetstream", "--store_dir", "/data"]
+    volumes:
+      - nats_data:/data
+    ports:
+      - "4222:4222"
+    healthcheck:
+      test: ["CMD", "nats", "server", "check", "jetstream"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Object Storage
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: aim
+      MINIO_ROOT_PASSWORD: aimsecret
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Quantum-Safe Crypto Service
+  pqsigner:
+    build:
+      context: ../../pqsigner
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - pqsigner_keys:/app/infra/keys
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Verifier Service
+  verifier-simple:
+    build:
+      context: ../../verifier-simple
+      dockerfile: Dockerfile
+    ports:
+      - "3006:3006"
+    environment:
+      VERIFIER_MODEL: distilbert-base-uncased
+      USE_MODEL: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3006/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Ledger Service
+  ledgerd:
+    build:
+      context: ../../ledgerd
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      PQSIGNER_URL: https://pqsigner:3000
+      LEDGERD_PORT: 3001
+      TLS_CERT_PATH: /certs/ledgerd.crt
+      TLS_KEY_PATH: /certs/ledgerd.key
+      TLS_CA_PATH: /certs/ca.crt
+    volumes:
+      - ../certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pqsigner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/internal/journal/latest', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Mint Service
+  mintd:
+    build:
+      context: ../../mintd
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      NATS_URL: nats://nats:4222
+      VERIFIER_URL: http://verifier-simple:3006
+      LEDGERD_URL: http://ledgerd:3001
+      MINTD_PORT: 3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      verifier-simple:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/internal/jobs', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Log Service
+  logd:
+    build:
+      context: ../../logd
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: aim
+      MINIO_SECRET_KEY: aimsecret
+      MINIO_BUCKET: aim-checkpoints
+      PQSIGNER_URL: http://pqsigner:3000
+      LOGD_PORT: 3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      pqsigner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/internal/checkpoint/latest', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Treasury Service
+  treasury:
+    build:
+      context: ../../treasury
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      TREASURY_USD_BID: 0.99
+      TREASURY_USD_ASK: 1.01
+      TREASURY_PORT: 3004
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/rates', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Gateway Service
+  gateway:
+    build:
+      context: ../../gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      LEDGERD_URL: https://ledgerd:3001
+      MINTD_URL: https://mintd:3003
+      LOGD_URL: https://logd:3002
+      TREASURY_URL: https://treasury:3004
+      PQSIGNER_URL: https://pqsigner:3000
+      JWT_SECRET: your-jwt-secret-here
+      GATEWAY_PORT: 3005
+      NODE_ENV: production
+      TLS_CERT_PATH: /certs/gateway.crt
+      TLS_KEY_PATH: /certs/gateway.key
+      TLS_CA_PATH: /certs/ca.crt
+    volumes:
+      - ../certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+      mintd:
+        condition: service_healthy
+      logd:
+        condition: service_healthy
+      treasury:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Agent Gateway
+  agent-gateway:
+    build:
+      context: ../../agent-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3008:3008"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      PQSIGNER_URL: http://pqsigner:3000
+      LEDGERD_URL: http://ledgerd:3001
+      AGENT_GATEWAY_PORT: 3008
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pqsigner:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3008/agents', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Marketplace
+  marketplace:
+    build:
+      context: ../../marketplace
+      dockerfile: Dockerfile
+    ports:
+      - "3009:3009"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      MARKETPLACE_PORT: 3009
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3009/capabilities', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Metering
+  metering:
+    build:
+      context: ../../metering
+      dockerfile: Dockerfile
+    ports:
+      - "3010:3010"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      LEDGERD_URL: http://ledgerd:3001
+      AGENT_GATEWAY_URL: http://agent-gateway:3008
+      METERING_PORT: 3010
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+      agent-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3010/usage', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Webhook Service
+  webhookd:
+    build:
+      context: ../../webhookd
+      dockerfile: Dockerfile
+    ports:
+      - "3011:3011"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      NATS_URL: nats://nats:4222
+      WEBHOOKD_PORT: 3011
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3011/webhooks', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Disputes Service
+  disputes:
+    build:
+      context: ../../disputes
+      dockerfile: Dockerfile
+    ports:
+      - "3012:3012"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      LEDGERD_URL: https://ledgerd:3001
+      VERIFIER_URL: https://verifier-simple:3006
+      DISPUTES_PORT: 3012
+    volumes:
+      - ../certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3012/disputes', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # On-Ramp Service
+  onramp:
+    build:
+      context: ../../onramp
+      dockerfile: Dockerfile
+    ports:
+      - "3013:3013"
+    environment:
+      POSTGRES_URL: postgres://aim:aim@postgres:5432/aim
+      LEDGERD_URL: https://ledgerd:3001
+      TREASURY_URL: https://treasury:3004
+      ONRAMP_PORT: 3013
+    volumes:
+      - ../certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ledgerd:
+        condition: service_healthy
+      treasury:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3013/onramp/intents', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Advanced Verifier
+  verifier-advanced:
+    build:
+      context: ../../verifier-advanced
+      dockerfile: Dockerfile
+    ports:
+      - "3014:3014"
+    environment:
+      VERIFIER_ADVANCED_PORT: 3014
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3014/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Audit Explorer
+  audit-explorer:
+    build:
+      context: ../../apps/audit-explorer
+      dockerfile: Dockerfile
+    ports:
+      - "3007:3007"
+    environment:
+      NEXT_PUBLIC_GATEWAY_URL: http://localhost:3005
+      NEXT_PUBLIC_LOGD_URL: http://localhost:3002
+    depends_on:
+      gateway:
+        condition: service_healthy
+      logd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # AI Model Marketplace Service
+  ai-marketplaced:
+    build:
+      context: ../../
+      dockerfile: ai-marketplaced/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3015
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3015:3015"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Training Service
+  ai-trainingd:
+    build:
+      context: ../../
+      dockerfile: ai-trainingd/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3016
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - AI_MARKETPLACE_URL=http://ai-marketplaced:3015
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3016:3016"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3016/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Inference Service
+  ai-inferenced:
+    build:
+      context: ../../
+      dockerfile: ai-inferenced/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3017
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - AI_MARKETPLACE_URL=http://ai-marketplaced:3015
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3017:3017"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3017/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Data Marketplace Service
+  ai-datad:
+    build:
+      context: ../../
+      dockerfile: ai-datad/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3018
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3018:3018"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3018/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Agent Registry Service
+  ai-agentsd:
+    build:
+      context: ../../
+      dockerfile: ai-agentsd/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3019
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3019:3019"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3019/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Content Generation Service
+  ai-contentd:
+    build:
+      context: ../../
+      dockerfile: ai-contentd/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3020
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3020:3020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Model Validation Service
+  ai-validationd:
+    build:
+      context: ../../
+      dockerfile: ai-validationd/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3021
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3021:3021"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Model Deployment Service
+  ai-deploymentd:
+    build:
+      context: ../../
+      dockerfile: ai-deploymentd/Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3022
+      - DATABASE_URL=postgresql://aim:aim@postgres:5432/aim
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GATEWAY_URL=http://gateway:3000
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-default-service-token}
+    ports:
+      - "3022:3022"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  nats_data:
+  minio_data:
+  pqsigner_keys:

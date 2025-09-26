@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Agent Registry Tables
+model AIAgent {
+  id                String   @id @default(uuid())
+  ownerId           String   @map("owner_id")
+  name              String
+  description       String?
+  agentType         String   @map("agent_type") // service, tool, model, assistant
+  capabilities      String[] @default([]) // text-generation, image-processing, etc.
+  version           String   @default("1.0.0")
+  status            String   @default("pending") // pending, verified, active, suspended, banned
+  registrationCost  BigInt   @map("registration_cost") // AIM tokens to register
+  monthlyFee        BigInt   @map("monthly_fee") // AIM tokens per month
+  apiEndpoint       String?  @map("api_endpoint")
+  documentation     String?
+  pricing           Json?    // Pricing model and rates
+  reputation        Decimal  @default(0.0) @db.Decimal(3, 2) // 0.00 to 5.00
+  totalEarnings     BigInt   @map("total_earnings") @default(0)
+  usageCount        Int      @map("usage_count") @default(0)
+  isPublic          Boolean  @map("is_public") @default(true)
+  isActive          Boolean  @map("is_active") @default(true)
+  tags              String[] @default([])
+  metadata          Json?    // Additional agent configuration
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  verifiedAt        DateTime? @map("verified_at")
+
+  // Relations
+  owner             Account  @relation(fields: [ownerId], references: [id])
+  verifications     AIAgentVerification[]
+  interactions      AIAgentInteraction[]
+  reviews           AIAgentReview[]
+  subscriptions     AIAgentSubscription[]
+
+  @@map("ai_agents")
+}
+
+// AI Agent Verifications
+model AIAgentVerification {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  verifierId        String   @map("verifier_id")
+  verificationType  String   @map("verification_type") // safety, performance, capability
+  status            String   @default("pending") // pending, approved, rejected
+  result            Json?    // Verification results and metrics
+  comments          String?
+  verifiedAt        DateTime? @map("verified_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  agent             AIAgent  @relation(fields: [agentId], references: [id])
+  verifier          Account  @relation(fields: [verifierId], references: [id])
+
+  @@map("ai_agent_verifications")
+}
+
+// AI Agent Interactions
+model AIAgentInteraction {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  userId            String   @map("user_id")
+  interactionType   String   @map("interaction_type") // api_call, chat, task_completion
+  input             Json?    // Input data
+  output            Json?    // Output data
+  tokensUsed        Int      @map("tokens_used") @default(0)
+  costAIM           BigInt   @map("cost_aim") @default(0)
+  duration          Int      @default(0) // milliseconds
+  success           Boolean  @default(true)
+  errorMessage      String?  @map("error_message")
+  satisfaction      Decimal? @db.Decimal(3, 2) // User satisfaction rating
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  agent             AIAgent  @relation(fields: [agentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@map("ai_agent_interactions")
+}
+
+// AI Agent Reviews
+model AIAgentReview {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  userId            String   @map("user_id")
+  rating            Decimal  @db.Decimal(3, 2) // 0.00 to 5.00
+  comment           String?
+  performance       Decimal? @db.Decimal(3, 2) // Performance rating
+  reliability       Decimal? @db.Decimal(3, 2) // Reliability rating
+  easeOfUse         Decimal? @db.Decimal(3, 2) // Ease of use rating
+  valueForMoney     Decimal? @db.Decimal(3, 2) // Value for money rating
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  agent             AIAgent  @relation(fields: [agentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@unique([userId, agentId])
+  @@map("ai_agent_reviews")
+}
+
+// AI Agent Subscriptions
+model AIAgentSubscription {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  userId            String   @map("user_id")
+  plan              String   @default("basic") // basic, premium, enterprise
+  monthlyFee        BigInt   @map("monthly_fee") // AIM tokens per month
+  usageLimit        Int      @map("usage_limit") // Monthly usage limit
+  currentUsage      Int      @map("current_usage") @default(0)
+  status            String   @default("active") // active, suspended, cancelled
+  startDate         DateTime @default(now()) @map("start_date")
+  endDate           DateTime? @map("end_date")
+  autoRenew         Boolean  @map("auto_renew") @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  agent             AIAgent  @relation(fields: [agentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@unique([userId, agentId])
+  @@map("ai_agent_subscriptions")
+}
+
+// AI Agent Categories
+model AIAgentCategory {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  description       String?
+  parentId          String?  @map("parent_id")
+  isActive          Boolean  @map("is_active") @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  parent            AIAgentCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children          AIAgentCategory[] @relation("CategoryHierarchy")
+
+  @@map("ai_agent_categories")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  ownedAgents       AIAgent[]
+  verifications     AIAgentVerification[]
+  interactions      AIAgentInteraction[]
+  agentReviews      AIAgentReview[]
+  agentSubscriptions AIAgentSubscription[]
+
+  @@map("accounts")
+}

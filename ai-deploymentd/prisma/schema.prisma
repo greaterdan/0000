@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Model Deployment Tables
+model AIModelDeployment {
+  id                String   @id @default(uuid())
+  modelId           String   @map("model_id")
+  deployerId        String   @map("deployer_id")
+  name              String
+  description       String?
+  deploymentType    String   @map("deployment_type") // endpoint, service, batch, streaming
+  environment       String   @default("production") // development, staging, production
+  status            String   @default("pending") // pending, deploying, active, suspended, failed
+  endpoint          String?  // API endpoint URL
+  version           String   @default("1.0.0")
+  replicas          Int      @default(1)
+  resources         Json?    // CPU, memory, GPU requirements
+  scaling           Json?    // Auto-scaling configuration
+  monitoring        Json?    // Monitoring and alerting config
+  costAIM           BigInt   @map("cost_aim") // AIM tokens for deployment
+  monthlyFee        BigInt   @map("monthly_fee") // AIM tokens per month
+  totalEarnings     BigInt   @map("total_earnings") @default(0)
+  usageCount        Int      @map("usage_count") @default(0)
+  isPublic          Boolean  @map("is_public") @default(true)
+  isActive          Boolean  @map("is_active") @default(true)
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deployedAt        DateTime? @map("deployed_at")
+
+  // Relations
+  model             AIModel  @relation(fields: [modelId], references: [id])
+  deployer          Account  @relation(fields: [deployerId], references: [id])
+  requests          AIModelRequest[]
+  metrics           AIModelDeploymentMetrics[]
+  logs              AIModelDeploymentLog[]
+
+  @@map("ai_model_deployments")
+}
+
+// AI Model Requests
+model AIModelRequest {
+  id                String   @id @default(uuid())
+  deploymentId      String   @map("deployment_id")
+  userId            String   @map("user_id")
+  requestType       String   @map("request_type") // inference, batch, streaming
+  input             Json     // Request input data
+  output            Json?    // Request output data
+  tokensUsed        Int      @map("tokens_used") @default(0)
+  costAIM           BigInt   @map("cost_aim") @default(0)
+  duration          Int      @default(0) // milliseconds
+  status            String   @default("pending") // pending, processing, completed, failed
+  errorMessage      String?  @map("error_message")
+  userAgent         String?  @map("user_agent")
+  ipAddress         String?  @map("ip_address")
+  createdAt         DateTime @default(now()) @map("created_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Relations
+  deployment        AIModelDeployment @relation(fields: [deploymentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@map("ai_model_requests")
+}
+
+// AI Model Deployment Metrics
+model AIModelDeploymentMetrics {
+  id                String   @id @default(uuid())
+  deploymentId      String   @map("deployment_id")
+  metric            String   // latency, throughput, error_rate, cpu_usage, memory_usage
+  value             Decimal  @db.Decimal(10, 4)
+  unit              String   // ms, req/s, %, MB, etc.
+  timestamp         DateTime @default(now())
+  metadata          Json?    // Additional metric data
+
+  // Relations
+  deployment        AIModelDeployment @relation(fields: [deploymentId], references: [id])
+
+  @@map("ai_model_deployment_metrics")
+}
+
+// AI Model Deployment Logs
+model AIModelDeploymentLog {
+  id                String   @id @default(uuid())
+  deploymentId      String   @map("deployment_id")
+  level             String   // info, warning, error, debug
+  message           String
+  context           Json?    // Additional context data
+  timestamp         DateTime @default(now())
+
+  // Relations
+  deployment        AIModelDeployment @relation(fields: [deploymentId], references: [id])
+
+  @@map("ai_model_deployment_logs")
+}
+
+// AI Model Deployment Templates
+model AIModelDeploymentTemplate {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  deploymentType    String   @map("deployment_type")
+  environment       String   @default("production")
+  resources         Json     // Default resource requirements
+  scaling           Json?    // Default scaling configuration
+  monitoring        Json?    // Default monitoring config
+  isPublic          Boolean  @map("is_public") @default(true)
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2) // 0.00 to 5.00
+  tags              String[] @default([])
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_model_deployment_templates")
+}
+
+// AI Model Deployment Infrastructure
+model AIModelDeploymentInfrastructure {
+  id                String   @id @default(uuid())
+  name              String
+  type              String   // kubernetes, docker, serverless, edge
+  region            String
+  provider          String   // aws, azure, gcp, local
+  capacity          Json     // Available resources
+  pricing           Json     // Pricing model
+  isActive          Boolean  @map("is_active") @default(true)
+  usageCount        Int      @map("usage_count") @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_model_deployment_infrastructure")
+}
+
+// AI Model relation (from ai-marketplaced)
+model AIModel {
+  id                String   @id @default(uuid())
+  creatorId         String   @map("creator_id")
+  name              String
+  description       String?
+  modelType         String   @map("model_type")
+  modelSize         BigInt   @map("model_size")
+  version           String   @default("1.0.0")
+  costPerToken      Decimal  @map("cost_per_token")
+  totalEarnings     BigInt   @map("total_earnings") @default(0)
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2)
+  tags              String[] @default([])
+  isPublic          Boolean  @map("is_public") @default(true)
+  isActive          Boolean  @map("is_active") @default(true)
+  modelUrl          String?  @map("model_url")
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  deployments       AIModelDeployment[]
+
+  @@map("ai_models")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  deployments       AIModelDeployment[]
+  requests          AIModelRequest[]
+
+  @@map("accounts")
+}

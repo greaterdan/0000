@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// AI Content Generation Tables
+model AIContent {
+  id                String   @id @default(uuid())
+  creatorId         String   @map("creator_id")
+  title             String
+  description       String?
+  contentType       String   @map("content_type") // text, image, audio, video, code
+  category          String   // blog, social, marketing, educational, entertainment
+  prompt            String   // Original generation prompt
+  generatedContent  Json     @map("generated_content") // Generated content data
+  metadata          Json?    // Generation parameters, model info, etc.
+  costAIM           BigInt   @map("cost_aim") // AIM tokens spent on generation
+  isPublic          Boolean  @map("is_public") @default(false)
+  isForSale         Boolean  @map("is_for_sale") @default(false)
+  salePrice         BigInt?  @map("sale_price") // AIM tokens to purchase
+  downloadUrl       String?  @map("download_url")
+  previewUrl        String?  @map("preview_url")
+  tags              String[] @default([])
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2) // 0.00 to 5.00
+  totalEarnings     BigInt   @map("total_earnings") @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  creator           Account  @relation(fields: [creatorId], references: [id])
+  purchases         AIContentPurchase[]
+  reviews           AIContentReview[]
+  generations       AIContentGeneration[]
+
+  @@map("ai_content")
+}
+
+// AI Content Generations (tracks generation requests)
+model AIContentGeneration {
+  id                String   @id @default(uuid())
+  contentId         String   @map("content_id")
+  userId            String   @map("user_id")
+  prompt            String
+  parameters        Json     // Generation parameters
+  model             String   // AI model used
+  tokensUsed        Int      @map("tokens_used")
+  costAIM           BigInt   @map("cost_aim")
+  duration          Int      @default(0) // milliseconds
+  success           Boolean  @default(true)
+  errorMessage      String?  @map("error_message")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  content           AIContent @relation(fields: [contentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@map("ai_content_generations")
+}
+
+// AI Content Purchases
+model AIContentPurchase {
+  id                String   @id @default(uuid())
+  contentId         String   @map("content_id")
+  buyerId           String   @map("buyer_id")
+  costAIM           BigInt   @map("cost_aim")
+  downloadUrl       String?  @map("download_url")
+  downloadExpiry    DateTime? @map("download_expiry")
+  downloadCount     Int      @map("download_count") @default(0)
+  maxDownloads      Int      @map("max_downloads") @default(5)
+  isActive          Boolean  @map("is_active") @default(true)
+  purchasedAt       DateTime @default(now()) @map("purchased_at")
+
+  // Relations
+  content           AIContent @relation(fields: [contentId], references: [id])
+  buyer             Account  @relation(fields: [buyerId], references: [id])
+
+  @@map("ai_content_purchases")
+}
+
+// AI Content Reviews
+model AIContentReview {
+  id                String   @id @default(uuid())
+  contentId         String   @map("content_id")
+  userId            String   @map("user_id")
+  rating            Decimal  @db.Decimal(3, 2) // 0.00 to 5.00
+  comment           String?
+  quality           Decimal? @db.Decimal(3, 2) // Content quality rating
+  creativity        Decimal? @db.Decimal(3, 2) // Creativity rating
+  usefulness        Decimal? @db.Decimal(3, 2) // Usefulness rating
+  originality       Decimal? @db.Decimal(3, 2) // Originality rating
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  content           AIContent @relation(fields: [contentId], references: [id])
+  user              Account  @relation(fields: [userId], references: [id])
+
+  @@unique([userId, contentId])
+  @@map("ai_content_reviews")
+}
+
+// AI Content Templates
+model AIContentTemplate {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  contentType       String   @map("content_type")
+  category          String
+  template          Json     // Template structure and parameters
+  isPublic          Boolean  @map("is_public") @default(true)
+  usageCount        Int      @map("usage_count") @default(0)
+  rating            Decimal? @db.Decimal(3, 2)
+  tags              String[] @default([])
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_content_templates")
+}
+
+// AI Content Categories
+model AIContentCategory {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  description       String?
+  parentId          String?  @map("parent_id")
+  isActive          Boolean  @map("is_active") @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  parent            AIContentCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children          AIContentCategory[] @relation("CategoryHierarchy")
+
+  @@map("ai_content_categories")
+}
+
+// Account relation (extends existing accounts table)
+model Account {
+  id                String        @id @default(uuid())
+  displayName       String        @map("display_name")
+  kind              String        // human, agent, treasury
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  createdContent    AIContent[]
+  contentGenerations AIContentGeneration[]
+  contentPurchases  AIContentPurchase[]
+  contentReviews    AIContentReview[]
+
+  @@map("accounts")
+}
