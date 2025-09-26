@@ -42,6 +42,16 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
   }));
   
+  // Add root health endpoint for Railway BEFORE setting global prefix
+  app.use('/health', (req, res) => {
+    res.json({
+      status: 'healthy',
+      service: 'gateway',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+    });
+  });
+  
   // Set global prefix
   app.setGlobalPrefix('api');
   
@@ -75,16 +85,6 @@ async function bootstrap() {
     swaggerOptions: {
       persistAuthorization: true,
     },
-  });
-  
-  // Add root health endpoint for Railway
-  app.use('/health', (req, res) => {
-    res.json({
-      status: 'healthy',
-      service: 'gateway',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-    });
   });
   
   const port = process.env.PORT || 3000;
