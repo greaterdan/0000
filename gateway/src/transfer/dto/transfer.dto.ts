@@ -344,3 +344,35 @@ export class TransferStatsDto {
   })
   transfersByType: Record<TransferType, number>;
 }
+
+export class TransferHistoryResponseDto extends BaseResponseDto {
+  @ApiProperty({
+    description: 'List of transfer history items',
+    type: [TransferHistoryDto]
+  })
+  transfers: TransferHistoryDto[];
+
+  @ApiProperty({
+    description: 'Pagination information',
+    example: {
+      page: 1,
+      limit: 20,
+      total: 1000,
+      totalPages: 50
+    }
+  })
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export class TransferStatsResponseDto extends BaseResponseDto {
+  @ApiProperty({
+    description: 'Transfer statistics',
+    type: TransferStatsDto
+  })
+  stats: TransferStatsDto;
+}

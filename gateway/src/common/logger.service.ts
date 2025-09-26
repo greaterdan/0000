@@ -91,4 +91,40 @@ export class LoggerService implements NestLoggerService {
       ...context,
     });
   }
+
+  logError(error: any, context?: LogContext) {
+    this.error(`Error: ${error.message || error}`, error.stack, context);
+  }
+
+  logDatabase(operation: string, table: string, duration: number, details?: any) {
+    this.log(`Database: ${operation} on ${table}`, {
+      operation,
+      table,
+      duration,
+      ...details,
+    });
+  }
+
+  logExternalService(service: string, operation: string, duration: number, status: string) {
+    this.log(`External Service: ${service} - ${operation}`, {
+      service,
+      operation,
+      duration,
+      status,
+    });
+  }
+
+  logBusinessEvent(eventType: string, details?: any) {
+    this.log(`Business Event: ${eventType}`, {
+      eventType,
+      ...details,
+    });
+  }
+
+  logHealth(component: string, details?: any) {
+    this.log(`Health Check: ${component}`, {
+      component,
+      ...details,
+    });
+  }
 }

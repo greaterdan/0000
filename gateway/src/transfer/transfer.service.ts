@@ -79,4 +79,75 @@ export class TransferService {
       throw error;
     }
   }
+
+  async getTransferHistory(accountId: string, query: any) {
+    const ledgerdUrl = process.env.LEDGERD_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${ledgerdUrl}/internal/transfers/${accountId}`, {
+          params: query
+        })
+      );
+      
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return {
+          transfers: [],
+          pagination: {
+            page: query.page || 1,
+            limit: query.limit || 20,
+            total: 0,
+            totalPages: 0
+          }
+        };
+      }
+      throw error;
+    }
+  }
+
+  async getTransferStats(accountId: string) {
+    const ledgerdUrl = process.env.LEDGERD_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${ledgerdUrl}/internal/transfers/${accountId}/stats`)
+      );
+      
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return {
+          totalTransfers: 0,
+          totalVolume: '0',
+          totalFees: '0',
+          averageAmount: '0',
+          successRate: 0,
+          transfersByStatus: {},
+          transfersByType: {}
+        };
+      }
+      throw error;
+    }
+  }
+
+  async getTransfer(transactionId: string, accountId: string) {
+    const ledgerdUrl = process.env.LEDGERD_URL || 'http://localhost:3001';
+    
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${ledgerdUrl}/internal/transfers/${transactionId}`, {
+          params: { accountId }
+        })
+      );
+      
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        throw new BadRequestException('Transfer not found');
+      }
+      throw error;
+    }
+  }
 }
