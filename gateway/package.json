@@ -42,5 +42,5 @@
     "@types/passport-jwt": "^3.0.13",
     "@types/winston": "^2.4.4",
     "typescript": "^5.1.3"
-  },
+  }
 }
